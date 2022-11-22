@@ -5,14 +5,7 @@ import os
 
 def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
     """
-    Parameters
-    ----------
-    hdfs:list[str]
-    out_dir:str
-    sds_index:int
-        subdataset index
-    suffix:str
-    Returns
+    批量执行提取子数据集操作
     -------
 
     """
