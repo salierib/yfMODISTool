@@ -3,11 +3,21 @@ import arcpy
 import time
 import os
 
+
 def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
     """
-    批量执行提取子数据集操作
-    -------
+    批量提取子数据集工具
 
+    输入
+    ----------
+    hdfs:List[str]
+        由hdf文件的绝对路径组成的列表
+    out_dir:str
+        提取子数据集后的文件夹
+    sds_index:int
+        待提取的子数据集的索引，从0开始
+    suffix:str
+        提取子数据集后新生成文件名的后缀，默认为"NDVI"
     """
     nums = len(hdfs)
     num = 1
@@ -28,10 +38,36 @@ def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
 
 
 def normal_mosaic_rule(fname):
+    """
+    执行批量拼接操作的分组规则，即基于何种规则对参与拼接操作的栅格文件进行分组，属于同一组中的栅格将执行拼接操作
+
+    输入
+    ----------
+    fname:str
+        文件名
+
+    Returns
+    -------
+    当前栅格文件所属的组名
+
+    """
     return '.'.join(fname.split('.')[:2]) + '.' + '.'.join(fname.split('.')[-2:])
 
 
 def group_tifs(tif_names, group_func="mosaic"):
+    """
+    输入
+    ----------
+    tif_names:List[str]
+        参与分组的文件名
+    group_func:str，or function
+        计算所属分组用到的函数
+
+    Returns
+    -------
+    grouped_tifs:dict
+        键为组名,值为当前组包含的栅格文件的文件名构成的列表
+    """
     if group_func == "mosaic":
         group_func = normal_mosaic_rule
     grouped_tifs = {}
@@ -47,6 +83,26 @@ def group_tifs(tif_names, group_func="mosaic"):
 
 def batch_mosaic(in_dir, out_dir, groups=None, pixel_type="16_BIT_SIGNED", mosaic_method="MAXIMUM",
                  colormap_mode="FIRST"):
+    """
+    批量拼接工具
+
+    对in_dir中的所有.tif文件按照groups中的文件名分组方式进行重镶嵌
+
+    输入
+    ----------
+    in_dir：str
+        输入文件夹
+    out_dir：str
+        输出文件夹
+    groups：dict
+        键为组名，值为当前组对应的文件名列表
+    pixel_type：str
+        指定输出栅格数据集的位深度，默认为"16_BIT_SIGNED"
+    mosaic_method：str
+        用于镶嵌重叠的方法，默认为"LAST"
+    colormap_mode：str
+        对输入栅格中应用于镶嵌输出的色彩映射表进行选择的方法，默认为"FIRST"
+    """
     tif_names = [n for n in os.listdir(in_dir) if n.endswith(".tif")]
     if groups is None:
         groups = group_tifs(tif_names, group_func="mosaic")
@@ -74,11 +130,43 @@ def batch_mosaic(in_dir, out_dir, groups=None, pixel_type="16_BIT_SIGNED", mosai
         num = num + 1
 
 
-def batch_project_raster(rasters, out_dir, prefix="pr_", out_coor_system="WGS_1984.prj",
+def batch_project_raster(rasters, out_dir, prefix=None, out_coor_system="WGS_1984.prj",
                          resampling_type="NEAREST", cell_size="#"):
+    """
+    批量投影栅格工具
+
+    将in_dir中的所有栅格文件投影到out_corr_syestem坐标系下
+
+    Parameters
+    ----------
+    rasters:List[str]
+        由待进行投影栅格操作的栅格文件的绝对路径组成的列表
+    out_dir:str
+        批量投影栅格后的输出文件夹
+    prefix:str
+        投影后栅格的新文件名的前缀
+    out_coor_system:
+        待投影到的目标坐标系文件路径(.prj)
+    resampling_type:str
+        要使用的重采样算法。默认设置为 NEAREST。
+        NEAREST —最邻近分配法
+        BILINEAR —双线性插值法
+        CUBIC —三次卷积插值法
+        MAJORITY —众数重采样法
+    cell_size:str
+        新栅格数据集的像元大小。
+        若输出分辨率为250m，则为”250 250"
+
+    Examples
+    ----------
+    >> in_dir = r"S:\1_merge"
+    >> tifs = [os.path.join(in_dir,n) for n in os.listdir(in_dir) if n.endswith(".tif")]
+    >> batch_project_raster(tifs,  out_dir=r"S:\test2")
+    """
     if arcpy.CheckExtension("Spatial") != "Available":
         arcpy.AddMessage("Error!!! Spatial Analyst is unavailable")
-
+    if prefix is None:
+        prefix = ""
     nums = len(rasters)
     num = 1
     for raster in rasters:
@@ -100,6 +188,37 @@ def batch_project_raster(rasters, out_dir, prefix="pr_", out_coor_system="WGS_19
 
 
 def batch_clip_raster(rasters, out_dir, masks):
+    """
+    批量裁剪工具
+
+    Parameters
+    ----------
+    rasters:List[str]
+        由待进行裁剪操作的栅格文件组成的列表
+    out_dir:str
+        批量裁剪后的输出文件夹
+    masks:List
+        将作为剪切范围使用的已有栅格或矢量图层
+    prefix:str,optional
+        裁剪后文件名的前缀，当不指定时，为掩膜文件的文件名
+
+    Examples
+    ----------
+    >> tifs = [u'H:\\NDVI_china\\scriptTest\\0_ndvi\\A2004001.NDVI.tif',
+               u'H:\\NDVI_china\\scriptTest\\0_ndvi\\A2004032.NDVI.tif',
+               u'H:\\NDVI_china\\scriptTest\\0_ndvi\\A2004061.NDVI.tif']
+    >> masks = [u'H:\\NDVI_china\\scriptTest\\0_shapefiles\\anhui.shp',
+                u'H:\\NDVI_china\\scriptTest\\0_shapefiles\\beijing.shp']
+    >> batch_clip_raster(rasters=tifs,masks=masks,out_dir=r"S:\test2")
+
+    1/6 | anhui_A2004001.NDVI.tif Completed, time used 5.54600000381s
+    2/6 | anhui_A2004032.NDVI.tif Completed, time used 0.138999938965s
+    3/6 | anhui_A2004061.NDVI.tif Completed, time used 0.136000156403s
+    4/6 | beijing_A2004001.NDVI.tif Completed, time used 0.105000019073s
+    5/6 | beijing_A2004032.NDVI.tif Completed, time used 0.100999832153s
+    6/6 | beijing_A2004061.NDVI.tif Completed, time used 0.101000070572s
+
+    """
     nums = len(rasters) * len(masks)
     num = 1
     for i, mask in enumerate(masks):
@@ -121,11 +240,33 @@ def batch_clip_raster(rasters, out_dir, masks):
             num += 1
 
 
-def batch_multiply(rasters, out_dir, scale_factor=0.0001, prefix="scaled_"):
-    scale_factor = str(scale_factor)
+def batch_multiply(rasters, out_dir, scale_factor=0.0001, prefix=None):
+    """
+    批量乘工具
+
+    批量将栅格的像元值乘以缩放因子
+
+    Parameters
+    ----------
+    rasters:List[str]
+        由待进行乘操作的栅格文件组成的列表
+    out_dir:str
+        批量乘后的输出文件夹
+    scale_factor:float
+        默认为0.0001，对应NDVI
+    prefix:str,optional
+        执行乘操作后文件的前缀，默认为“scaled_"
+
+    Examples
+    -------
+
+    """
     arcpy.CheckOutExtension("Spatial")
     if arcpy.CheckExtension("Spatial") != "Available":
         arcpy.AddMessage("Error!!! Spatial Analyst is unavailable")
+    if prefix is None:
+        prefix = ""
+    scale_factor = str(scale_factor)
 
     nums = len(rasters)
     num = 1
@@ -145,8 +286,24 @@ def batch_multiply(rasters, out_dir, scale_factor=0.0001, prefix="scaled_"):
         num = num + 1
 
 
-def batch_setnull(rasters, out_dir, condition="VALUE>65528", prefix="sn_"):
+def batch_setnull(rasters, out_dir, condition="VALUE>65528", prefix=None):
+    """
+    批量设为空工具
+
+    Parameters
+    ----------
+    rasters:List[str]
+        由待进行设为空操作的栅格文件组成的列表
+    out_dir:str
+        批量设为空后的输出文件夹
+    condition:List
+        决定输入像元为真或假的逻辑表达式,默认为"VALUE>65528"
+    prefix:str,optional
+        设为空后新文件的前缀，默认为"sn_"
+    """
     arcpy.CheckOutExtension("Spatial")
+    if prefix is None:
+        prefix = ""
     nums = len(rasters)
     num = 1
     for raster in rasters:
@@ -166,10 +323,12 @@ def batch_setnull(rasters, out_dir, condition="VALUE>65528", prefix="sn_"):
 
 
 def find_tifs(in_dir):
+    # 返回当前文件夹（不包含子文件夹）in_dir中扩展名为.tif的文件的绝对路径构成的列表
     return [os.path.join(in_dir, fname) for fname in os.listdir(in_dir) if fname.endswith(".tif")]
 
 
 def localtime():
+    # 返回当前的时间
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
 
