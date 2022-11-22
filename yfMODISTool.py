@@ -4,6 +4,26 @@ import time
 import os
 
 
+def is_contain_cn(check_str):
+    """
+    检查字符串中是否包含中文
+    """
+    for ch in check_str:
+        if u"\u4e00" <= ch <= u'\u9fff':
+            return True
+    return False
+
+
+def find_tifs(in_dir):
+    # 返回当前文件夹（不包含子文件夹）in_dir中扩展名为.tif的文件的绝对路径构成的列表
+    return [os.path.join(in_dir, fname) for fname in os.listdir(in_dir) if fname.endswith(".tif")]
+
+
+def localtime():
+    # 返回当前的时间
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+
+
 def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
     """
     批量提取子数据集工具
@@ -320,16 +340,6 @@ def batch_setnull(rasters, out_dir, condition="VALUE>65528", prefix=None):
         else:
             arcpy.AddMessage("%d/%d | %s already exists" % (num, nums, out_raster))
         num = num + 1
-
-
-def find_tifs(in_dir):
-    # 返回当前文件夹（不包含子文件夹）in_dir中扩展名为.tif的文件的绝对路径构成的列表
-    return [os.path.join(in_dir, fname) for fname in os.listdir(in_dir) if fname.endswith(".tif")]
-
-
-def localtime():
-    # 返回当前的时间
-    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
 
 def mod13preprocess(workspace, hdfs, masks, out_coor_system, cell_size="#",
@@ -662,53 +672,57 @@ class Tool1(object):
         hdfs = hdfs.split(";")
         masks = masks.split(";")
 
-        if preset in ["MOD13_NDVI", "MOD13_EVI"]:
-            mod13preprocess(workspace=workspace,
-                            hdfs=hdfs,
-                            masks=masks,
-                            out_coor_system=out_coor_system,
-                            cell_size=cell_size,
-                            sds_index=sds_index,
-                            sds_name=sds_name,
-                            pixel_type=pixel_type,
-                            mosaic_method=mosaic_method,
-                            colormap_mode=colormap_mode,
-                            resampling_type=resampling_type,
-                            scale_factor=scale_factor,
-                            scale_prefix=scale_prefix,
-                            pr_prefix=pr_prefix)
-        elif preset in ["MOD16_ET", "MOD16_PET"]:
-            mod16preprocess(workspace=workspace,
-                            hdfs=hdfs,
-                            masks=masks,
-                            out_coor_system=out_coor_system,
-                            cell_size=cell_size,
-                            sds_index=sds_index,
-                            sds_name=sds_name,
-                            pixel_type=pixel_type,
-                            mosaic_method=mosaic_method,
-                            colormap_mode=colormap_mode,
-                            resampling_type=resampling_type,
-                            scale_factor=scale_factor,
-                            scale_prefix=scale_prefix,
-                            pr_prefix=pr_prefix,
-                            sn_prefix=sn_prefix,
-                            condition=condition)
-        else:
-            mod16preprocess(workspace=workspace,
-                            hdfs=hdfs,
-                            masks=masks,
-                            out_coor_system=out_coor_system,
-                            cell_size=cell_size,
-                            sds_index=sds_index,
-                            sds_name=sds_name,
-                            pixel_type=pixel_type,
-                            mosaic_method=mosaic_method,
-                            colormap_mode=colormap_mode,
-                            resampling_type=resampling_type,
-                            scale_factor=scale_factor,
-                            scale_prefix=scale_prefix,
-                            pr_prefix=pr_prefix,
-                            sn_prefix=sn_prefix,
-                            condition=condition)
+        try:
+            if preset in ["MOD13_NDVI", "MOD13_EVI"]:
+                mod13preprocess(workspace=workspace,
+                                hdfs=hdfs,
+                                masks=masks,
+                                out_coor_system=out_coor_system,
+                                cell_size=cell_size,
+                                sds_index=sds_index,
+                                sds_name=sds_name,
+                                pixel_type=pixel_type,
+                                mosaic_method=mosaic_method,
+                                colormap_mode=colormap_mode,
+                                resampling_type=resampling_type,
+                                scale_factor=scale_factor,
+                                scale_prefix=scale_prefix,
+                                pr_prefix=pr_prefix)
+            elif preset in ["MOD16_ET", "MOD16_PET"]:
+                mod16preprocess(workspace=workspace,
+                                hdfs=hdfs,
+                                masks=masks,
+                                out_coor_system=out_coor_system,
+                                cell_size=cell_size,
+                                sds_index=sds_index,
+                                sds_name=sds_name,
+                                pixel_type=pixel_type,
+                                mosaic_method=mosaic_method,
+                                colormap_mode=colormap_mode,
+                                resampling_type=resampling_type,
+                                scale_factor=scale_factor,
+                                scale_prefix=scale_prefix,
+                                pr_prefix=pr_prefix,
+                                sn_prefix=sn_prefix,
+                                condition=condition)
+            else:
+                mod16preprocess(workspace=workspace,
+                                hdfs=hdfs,
+                                masks=masks,
+                                out_coor_system=out_coor_system,
+                                cell_size=cell_size,
+                                sds_index=sds_index,
+                                sds_name=sds_name,
+                                pixel_type=pixel_type,
+                                mosaic_method=mosaic_method,
+                                colormap_mode=colormap_mode,
+                                resampling_type=resampling_type,
+                                scale_factor=scale_factor,
+                                scale_prefix=scale_prefix,
+                                pr_prefix=pr_prefix,
+                                sn_prefix=sn_prefix,
+                                condition=condition)
+        except UnicodeEncodeError as cnerr:
+            arcpy.AddMessage("发生错误！部分参数包含中文字符导致该工具无法运行，可尝试修改为纯英文以解决%s"%"".encode('utf-8'))
+            raise cnerr
         return
