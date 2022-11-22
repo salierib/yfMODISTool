@@ -1,6 +1,7 @@
 # -- coding:cp936 –
 import arcpy
-
+import time
+import os
 
 def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
     """
@@ -485,8 +486,6 @@ class Tool1(object):
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-        import os
-        import time
 
         arcpy.env.parallelProcessingFactor = 0
 
