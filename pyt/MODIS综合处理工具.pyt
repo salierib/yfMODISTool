@@ -347,53 +347,89 @@ def mod13preprocess(workspace, hdfs, masks, out_coor_system, cell_size="#",
                     pixel_type="16_BIT_SIGNED", mosaic_method="LAST", colormap_mode="FIRST",
                     pr_prefix="pr_", resampling_type="NEAREST",
                     scale_prefix="", scale_factor=0.0001):
-    if not os.path.exists(workspace):
-        os.mkdir(workspace)
-    dir_names = ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_scale"]
-    dirs = [os.path.join(workspace, name) for name in dir_names]
-    for dir in dirs:
-        if not os.path.exists(dir):
-            os.mkdir(dir)
+    tile_count = len(set([os.path.split(h)[1].split(".")[2] for h in hdfs]))
+    if tile_count == 1:
+        dir_names = ["1_extract", "2_reproject", "3_clip", "4_scale"]
+        dirs = [os.path.join(workspace, name) for name in dir_names]
+        for dir in dirs:
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+        # step1
+        s = time.time()
+        arcpy.AddMessage("Starting step 1/4: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
+        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        e = time.time()
+        arcpy.AddMessage("Time for step1 = %.2fs. %s\n" % (e - s, localtime()))
 
-    # step1
-    s = time.time()
-    arcpy.AddMessage("Starting step 1/5: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
-    batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
-    e = time.time()
-    arcpy.AddMessage("Time for step1 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step2
+        s = time.time()
+        arcpy.AddMessage("Starting step 2/4: reproject raster into {0}... {1}".format(dirs[1], localtime()))
+        rasters = find_tifs(dirs[0])
+        batch_project_raster(rasters, dirs[1], prefix=pr_prefix, out_coor_system=out_coor_system,
+                             resampling_type=resampling_type, cell_size=cell_size)
+        e = time.time()
+        arcpy.AddMessage("Time for step2 = %.2fs. %s\n" % (e - s, localtime()))
 
-    # step2
-    s = time.time()
-    arcpy.AddMessage("Starting step 2/5: mosaic raster into {0}... {1}".format(dirs[1], localtime()))
-    batch_mosaic(dirs[0], dirs[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
-                 colormap_mode=colormap_mode)
-    e = time.time()
-    arcpy.AddMessage("Time for step2 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step3
+        s = time.time()
+        arcpy.AddMessage("Starting step 3/4: clip raster into {0}... {1}".format(dirs[2], localtime()))
+        rasters = find_tifs(dirs[1])
+        batch_clip_raster(rasters, dirs[2], masks=masks)
+        e = time.time()
+        arcpy.AddMessage("Time for step3 = %.2fs. %s\n" % (e - s, localtime()))
 
-    # step3
-    s = time.time()
-    arcpy.AddMessage("Starting step 3/5: reproject raster into {0}... {1}".format(dirs[2], localtime()))
-    rasters = find_tifs(dirs[1])
-    batch_project_raster(rasters, dirs[2], prefix=pr_prefix, out_coor_system=out_coor_system,
-                         resampling_type=resampling_type, cell_size=cell_size)
-    e = time.time()
-    arcpy.AddMessage("Time for step3 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step4
+        s = time.time()
+        arcpy.AddMessage("Starting step 4/4:raster times scale factor into {0}... {1}".format(dirs[3], localtime()))
+        tifs = find_tifs(dirs[2])
+        batch_multiply(tifs, out_dir=dirs[3], prefix=scale_prefix, scale_factor=scale_factor)
+        e = time.time()
+        arcpy.AddMessage("Time for step4 = %.2fs. %s\n" % (e - s, localtime()))
+    else:
+        dir_names = ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_scale"]
+        dirs = [os.path.join(workspace, name) for name in dir_names]
+        for dir in dirs:
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+        # step1
+        s = time.time()
+        arcpy.AddMessage("Starting step 1/5: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
+        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        e = time.time()
+        arcpy.AddMessage("Time for step1 = %.2fs. %s\n"%(e - s, localtime()))
 
-    # step4
-    s = time.time()
-    arcpy.AddMessage("Starting step 4/5: clip raster into {0}... {1}".format(dirs[3], localtime()))
-    rasters = find_tifs(dirs[2])
-    batch_clip_raster(rasters, dirs[3], masks=masks)
-    e = time.time()
-    arcpy.AddMessage("Time for step4 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step2
+        s = time.time()
+        arcpy.AddMessage("Starting step 2/5: mosaic raster into {0}... {1}".format(dirs[1], localtime()))
+        batch_mosaic(dirs[0], dirs[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
+                     colormap_mode=colormap_mode)
+        e = time.time()
+        arcpy.AddMessage("Time for step2 = %.2fs. %s\n"%(e - s, localtime()))
 
-    # step5
-    s = time.time()
-    arcpy.AddMessage("Starting step 5/5:raster times scale factor into {0}... {1}".format(dirs[4], localtime()))
-    tifs = find_tifs(dirs[3])
-    batch_multiply(tifs, out_dir=dirs[4], prefix=scale_prefix, scale_factor=scale_factor)
-    e = time.time()
-    arcpy.AddMessage("Time for step5 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step3
+        s = time.time()
+        arcpy.AddMessage("Starting step 3/5: reproject raster into {0}... {1}".format(dirs[2], localtime()))
+        rasters = find_tifs(dirs[1])
+        batch_project_raster(rasters, dirs[2], prefix=pr_prefix, out_coor_system=out_coor_system,
+                             resampling_type=resampling_type, cell_size=cell_size)
+        e = time.time()
+        arcpy.AddMessage("Time for step3 = %.2fs. %s\n"%(e - s, localtime()))
+
+        # step4
+        s = time.time()
+        arcpy.AddMessage("Starting step 4/5: clip raster into {0}... {1}".format(dirs[3], localtime()))
+        rasters = find_tifs(dirs[2])
+        batch_clip_raster(rasters, dirs[3], masks=masks)
+        e = time.time()
+        arcpy.AddMessage("Time for step4 = %.2fs. %s\n"%(e - s, localtime()))
+
+        # step5
+        s = time.time()
+        arcpy.AddMessage("Starting step 5/5:raster times scale factor into {0}... {1}".format(dirs[4], localtime()))
+        tifs = find_tifs(dirs[3])
+        batch_multiply(tifs, out_dir=dirs[4], prefix=scale_prefix, scale_factor=scale_factor)
+        e = time.time()
+        arcpy.AddMessage("Time for step5 = %.2fs. %s\n"%(e - s, localtime()))
 
 
 def mod16preprocess(workspace, hdfs, masks, out_coor_system, cell_size="#",
@@ -402,63 +438,107 @@ def mod16preprocess(workspace, hdfs, masks, out_coor_system, cell_size="#",
                     pr_prefix="pr_", resampling_type="NEAREST",
                     sn_prefix="sn_", condition="VALUE > 65528",
                     scale_prefix="", scale_factor=0.1):
-    if not os.path.exists(workspace):
-        os.mkdir(workspace)
+    tile_count = len(set([os.path.split(h)[1].split(".")[2] for h in hdfs]))
+    if tile_count == 1:
+        dir_names = ["1_extract", "2_reproject", "3_clip", "4_setn", "5_scale"]
+        dirs = [os.path.join(workspace, name) for name in dir_names]
+        for dir in dirs:
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+        # step1
+        s = time.time()
+        arcpy.AddMessage("Starting step 1/5: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
+        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        e = time.time()
+        arcpy.AddMessage("Time for step1 = %.2fs. %s\n" % (e - s, localtime()))
 
-    dir_names = ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_setn", "6_scale"]
-    dirs = [os.path.join(workspace, name) for name in dir_names]
-    for dir in dirs:
-        if not os.path.exists(dir):
-            os.mkdir(dir)
+        # step2
+        s = time.time()
+        arcpy.AddMessage("Starting step 2/5: reproject raster into {0}... {1}".format(dirs[1], localtime()))
+        rasters = find_tifs(dirs[0])
+        batch_project_raster(rasters, dirs[1], prefix=pr_prefix, out_coor_system=out_coor_system,
+                             resampling_type=resampling_type, cell_size=cell_size)
+        e = time.time()
+        arcpy.AddMessage("Time for step2 = %.2fs. %s\n" % (e - s, localtime()))
 
-    # step1
-    s = time.time()
-    arcpy.AddMessage("Starting step 1/6: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
-    batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
-    e = time.time()
-    arcpy.AddMessage("Time for step1 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step3
+        s = time.time()
+        arcpy.AddMessage("Starting step 3/5: clip raster into {0}... {1}".format(dirs[2], localtime()))
+        rasters = find_tifs(dirs[1])
+        batch_clip_raster(rasters, dirs[2], masks=masks)
+        e = time.time()
+        arcpy.AddMessage("Time for step3 = %.2fs. %s\n" % (e - s, localtime()))
 
-    # step2
-    s = time.time()
-    arcpy.AddMessage("Starting step 2/6: mosaic raster into {0}... {1}".format(dirs[1], localtime()))
-    batch_mosaic(dirs[0], dirs[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
-                 colormap_mode=colormap_mode)
-    e = time.time()
-    arcpy.AddMessage("Time for step2 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step4
+        s = time.time()
+        arcpy.AddMessage("Starting step 4/5: exclude invalid value, into {0}... {1}".format(dirs[3], localtime()))
+        rasters = find_tifs(dirs[2])
+        batch_setnull(rasters, dirs[3], condition=condition, prefix=sn_prefix)
+        e = time.time()
+        arcpy.AddMessage("Time for step4 = %.2fs. %s\n" % (e - s, localtime()))
 
-    # step3
-    s = time.time()
-    arcpy.AddMessage("Starting step 3/6: reproject raster into {0}... {1}".format(dirs[2], localtime()))
-    rasters = find_tifs(dirs[1])
-    batch_project_raster(rasters, dirs[2], prefix=pr_prefix, out_coor_system=out_coor_system,
-                         resampling_type=resampling_type, cell_size=cell_size)
-    e = time.time()
-    arcpy.AddMessage("Time for step3 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step5
+        s = time.time()
+        arcpy.AddMessage("Starting step 5/5: raster times scale factor into {0}... {1}".format(dirs[4], localtime()))
+        tifs = find_tifs(dirs[3])
+        batch_multiply(tifs, out_dir=dirs[4], prefix=scale_prefix, scale_factor=scale_factor)
+        e = time.time()
+        arcpy.AddMessage("Time for step5 = %.2fs. %s\n" % (e - s, localtime()))
 
-    # step4
-    s = time.time()
-    arcpy.AddMessage("Starting step 4/6: clip raster into {0}... {1}".format(dirs[3], localtime()))
-    rasters = find_tifs(dirs[2])
-    batch_clip_raster(rasters, dirs[3], masks=masks)
-    e = time.time()
-    arcpy.AddMessage("Time for step4 = {0} seconds. {1}\n".format(e - s, localtime()))
+    else:
+        dir_names = ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_setn", "6_scale"]
+        dirs = [os.path.join(workspace, name) for name in dir_names]
+        for dir in dirs:
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+        # step1
+        s = time.time()
+        arcpy.AddMessage("Starting step 1/6: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
+        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        e = time.time()
+        arcpy.AddMessage("Time for step1 = %.2fs. %s\n"%(e - s, localtime()))
 
-    # step5
-    s = time.time()
-    arcpy.AddMessage("Starting step 5/6: exclude invalid value, into {0}... {1}".format(dirs[4], localtime()))
-    rasters = find_tifs(dirs[3])
-    batch_setnull(rasters, dirs[4], condition=condition, prefix=sn_prefix)
-    e = time.time()
-    arcpy.AddMessage("Time for step5 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step2
+        s = time.time()
+        arcpy.AddMessage("Starting step 2/6: mosaic raster into {0}... {1}".format(dirs[1], localtime()))
+        batch_mosaic(dirs[0], dirs[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
+                     colormap_mode=colormap_mode)
+        e = time.time()
+        arcpy.AddMessage("Time for step2 = %.2fs. %s\n"%(e - s, localtime()))
 
-    # step6
-    s = time.time()
-    arcpy.AddMessage(
-        "Starting step 6/6: raster times scale factor into {0}... {1}".format(dirs[5], localtime()))
-    tifs = find_tifs(dirs[4])
-    batch_multiply(tifs, out_dir=dirs[5], prefix=scale_prefix, scale_factor=scale_factor)
-    e = time.time()
-    arcpy.AddMessage("Time for step5 = {0} seconds. {1}\n".format(e - s, localtime()))
+        # step3
+        s = time.time()
+        arcpy.AddMessage("Starting step 3/6: reproject raster into {0}... {1}".format(dirs[2], localtime()))
+        rasters = find_tifs(dirs[1])
+        batch_project_raster(rasters, dirs[2], prefix=pr_prefix, out_coor_system=out_coor_system,
+                             resampling_type=resampling_type, cell_size=cell_size)
+        e = time.time()
+        arcpy.AddMessage("Time for step3 = %.2fs. %s\n"%(e - s, localtime()))
+
+        # step4
+        s = time.time()
+        arcpy.AddMessage("Starting step 4/6: clip raster into {0}... {1}".format(dirs[3], localtime()))
+        rasters = find_tifs(dirs[2])
+        batch_clip_raster(rasters, dirs[3], masks=masks)
+        e = time.time()
+        arcpy.AddMessage("Time for step4 = %.2fs. %s\n"%(e - s, localtime()))
+
+        # step5
+        s = time.time()
+        arcpy.AddMessage("Starting step 5/6: exclude invalid value, into {0}... {1}".format(dirs[4], localtime()))
+        rasters = find_tifs(dirs[3])
+        batch_setnull(rasters, dirs[4], condition=condition, prefix=sn_prefix)
+        e = time.time()
+        arcpy.AddMessage("Time for step5 = %.2fs. %s\n"%(e - s, localtime()))
+
+        # step6
+        s = time.time()
+        arcpy.AddMessage(
+            "Starting step 6/6: raster times scale factor into {0}... {1}".format(dirs[5], localtime()))
+        tifs = find_tifs(dirs[4])
+        batch_multiply(tifs, out_dir=dirs[5], prefix=scale_prefix, scale_factor=scale_factor)
+        e = time.time()
+        arcpy.AddMessage("Time for step5 = %.2fs. %s\n"%(e - s, localtime()))
 
 
 class Toolbox(object):
