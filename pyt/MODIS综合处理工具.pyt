@@ -4,19 +4,26 @@ import time
 import os
 
 
-def is_contain_cn(check_str):
-    """
-    检查字符串中是否包含中文
-    """
-    for ch in check_str:
-        if u"\u4e00" <= ch <= u'\u9fff':
-            return True
-    return False
-
-
 def find_tifs(in_dir):
     # 返回当前文件夹（不包含子文件夹）in_dir中扩展名为.tif的文件的绝对路径构成的列表
     return [os.path.join(in_dir, fname) for fname in os.listdir(in_dir) if fname.endswith(".tif")]
+
+
+def batch_mkdir(workspace, names):
+    """
+    在当前文件夹中依次创建名为names[i]的新文件夹,并返回新建文件夹的绝对路径
+    Parameters
+    ----------
+    workspace:str
+        当前文件夹的绝对路径
+    names:list[str]
+        新文件夹的名称
+    """
+    paths = [os.path.join(workspace, name) for name in names]
+    for p in paths:
+        if not os.path.exists(p):
+            os.mkdir(p)
+    return paths
 
 
 def localtime():
@@ -24,7 +31,7 @@ def localtime():
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
 
-def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
+def batch_extract_sds(hdfs, out_path, sds_index=0, suffix="NDVI"):
     """
     批量提取子数据集工具
 
@@ -32,7 +39,7 @@ def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
     ----------
     hdfs:List[str]
         由hdf文件的绝对路径组成的列表
-    out_dir:str
+    out_path:str
         提取子数据集后的文件夹
     sds_index:int
         待提取的子数据集的索引，从0开始
@@ -44,7 +51,7 @@ def batch_extract_sds(hdfs, out_dir, sds_index=0, suffix="NDVI"):
     for hdf in hdfs:
         s = time.time()
         base_name = os.path.splitext(os.path.basename(hdf))[0]
-        out_tif = os.path.join(out_dir, base_name + "." + "{0}.tif".format(suffix))
+        out_tif = os.path.join(out_path, base_name + "." + "{0}.tif".format(suffix))
         if not os.path.exists(out_tif):
             try:
                 arcpy.ExtractSubDataset_management(hdf, out_tif, sds_index)
@@ -101,7 +108,7 @@ def group_tifs(tif_names, group_func="mosaic"):
     return grouped_tifs
 
 
-def batch_mosaic(in_dir, out_dir, groups=None, pixel_type="16_BIT_SIGNED", mosaic_method="MAXIMUM",
+def batch_mosaic(in_dir, out_path, groups=None, pixel_type="16_BIT_SIGNED", mosaic_method="MAXIMUM",
                  colormap_mode="FIRST"):
     """
     批量拼接工具
@@ -112,7 +119,7 @@ def batch_mosaic(in_dir, out_dir, groups=None, pixel_type="16_BIT_SIGNED", mosai
     ----------
     in_dir：str
         输入文件夹
-    out_dir：str
+    out_path：str
         输出文件夹
     groups：dict
         键为组名，值为当前组对应的文件名列表
@@ -136,9 +143,9 @@ def batch_mosaic(in_dir, out_dir, groups=None, pixel_type="16_BIT_SIGNED", mosai
     for i in groups:
         s = time.time()
         groups[i] = ';'.join(groups[i])
-        if not os.path.exists(os.path.join(out_dir, i)):
+        if not os.path.exists(os.path.join(out_path, i)):
             try:
-                arcpy.MosaicToNewRaster_management(groups[i], out_dir, i, out_coor_system, pixel_type,
+                arcpy.MosaicToNewRaster_management(groups[i], out_path, i, out_coor_system, pixel_type,
                                                    cell_width,
                                                    band_count, mosaic_method, colormap_mode)
                 e = time.time()
@@ -150,7 +157,7 @@ def batch_mosaic(in_dir, out_dir, groups=None, pixel_type="16_BIT_SIGNED", mosai
         num = num + 1
 
 
-def batch_project_raster(rasters, out_dir, prefix=None, out_coor_system="WGS_1984.prj",
+def batch_project_raster(rasters, out_path, prefix=None, out_coor_system="WGS_1984.prj",
                          resampling_type="NEAREST", cell_size="#"):
     """
     批量投影栅格工具
@@ -161,7 +168,7 @@ def batch_project_raster(rasters, out_dir, prefix=None, out_coor_system="WGS_198
     ----------
     rasters:List[str]
         由待进行投影栅格操作的栅格文件的绝对路径组成的列表
-    out_dir:str
+    out_path:str
         批量投影栅格后的输出文件夹
     prefix:str
         投影后栅格的新文件名的前缀
@@ -181,7 +188,7 @@ def batch_project_raster(rasters, out_dir, prefix=None, out_coor_system="WGS_198
     ----------
     >> in_dir = r"S:\1_merge"
     >> tifs = [os.path.join(in_dir,n) for n in os.listdir(in_dir) if n.endswith(".tif")]
-    >> batch_project_raster(tifs,  out_dir=r"S:\test2")
+    >> batch_project_raster(tifs,  out_path=r"S:\test2")
     """
     if arcpy.CheckExtension("Spatial") != "Available":
         arcpy.AddMessage("Error!!! Spatial Analyst is unavailable")
@@ -192,7 +199,7 @@ def batch_project_raster(rasters, out_dir, prefix=None, out_coor_system="WGS_198
     for raster in rasters:
         s = time.time()
         raster_name = os.path.split(raster)[1]
-        out_raster = os.path.join(out_dir, prefix + raster_name)
+        out_raster = os.path.join(out_path, prefix + raster_name)
         if not os.path.exists(out_raster):
             try:
                 arcpy.ProjectRaster_management(raster, out_raster, out_coor_system, resampling_type, cell_size,
@@ -207,7 +214,7 @@ def batch_project_raster(rasters, out_dir, prefix=None, out_coor_system="WGS_198
         num = num + 1
 
 
-def batch_clip_raster(rasters, out_dir, masks):
+def batch_clip_raster(rasters, out_path, masks):
     """
     批量裁剪工具
 
@@ -215,21 +222,20 @@ def batch_clip_raster(rasters, out_dir, masks):
     ----------
     rasters:List[str]
         由待进行裁剪操作的栅格文件组成的列表
-    out_dir:str
+    out_path:str
         批量裁剪后的输出文件夹
     masks:List
         将作为剪切范围使用的已有栅格或矢量图层
-    prefix:str,optional
-        裁剪后文件名的前缀，当不指定时，为掩膜文件的文件名
+
 
     Examples
     ----------
-    >> tifs = [u'H:\\NDVI_china\\scriptTest\\0_ndvi\\A2004001.NDVI.tif',
+    >> rasters = [u'H:\\NDVI_china\\scriptTest\\0_ndvi\\A2004001.NDVI.tif',
                u'H:\\NDVI_china\\scriptTest\\0_ndvi\\A2004032.NDVI.tif',
                u'H:\\NDVI_china\\scriptTest\\0_ndvi\\A2004061.NDVI.tif']
     >> masks = [u'H:\\NDVI_china\\scriptTest\\0_shapefiles\\anhui.shp',
                 u'H:\\NDVI_china\\scriptTest\\0_shapefiles\\beijing.shp']
-    >> batch_clip_raster(rasters=tifs,masks=masks,out_dir=r"S:\test2")
+    >> batch_clip_raster(rasters=tifs,masks=masks,out_path=r"S:\test2")
 
     1/6 | anhui_A2004001.NDVI.tif Completed, time used 5.54600000381s
     2/6 | anhui_A2004032.NDVI.tif Completed, time used 0.138999938965s
@@ -247,7 +253,7 @@ def batch_clip_raster(rasters, out_dir, masks):
             s = time.time()
             old_raster_name = os.path.splitext(os.path.basename(raster))[0]
             new_raster_name = "{0}_{1}.tif".format(mask_name, old_raster_name.split("_")[-1])
-            out_raster = os.path.join(out_dir, new_raster_name)
+            out_raster = os.path.join(out_path, new_raster_name)
             if not os.path.exists(out_raster):
                 try:
                     arcpy.Clip_management(raster, "#", out_raster, mask, "#", "ClippingGeometry")
@@ -260,7 +266,7 @@ def batch_clip_raster(rasters, out_dir, masks):
             num += 1
 
 
-def batch_multiply(rasters, out_dir, scale_factor=0.0001, prefix=None):
+def batch_multiply(rasters, out_path, scale_factor=0.0001, prefix=None):
     """
     批量乘工具
 
@@ -270,7 +276,7 @@ def batch_multiply(rasters, out_dir, scale_factor=0.0001, prefix=None):
     ----------
     rasters:List[str]
         由待进行乘操作的栅格文件组成的列表
-    out_dir:str
+    out_path:str
         批量乘后的输出文件夹
     scale_factor:float
         默认为0.0001，对应NDVI
@@ -293,7 +299,7 @@ def batch_multiply(rasters, out_dir, scale_factor=0.0001, prefix=None):
     for raster in rasters:
         s = time.time()
         raster_name = os.path.split(raster)[1]
-        out_raster = os.path.join(out_dir, prefix + raster_name)
+        out_raster = os.path.join(out_path, prefix + raster_name)
         if not os.path.exists(out_raster):
             try:
                 arcpy.gp.Times_sa(raster, scale_factor, out_raster)
@@ -306,7 +312,7 @@ def batch_multiply(rasters, out_dir, scale_factor=0.0001, prefix=None):
         num = num + 1
 
 
-def batch_setnull(rasters, out_dir, condition="VALUE>65528", prefix=None):
+def batch_setnull(rasters, out_path, condition="VALUE>65528", prefix=None):
     """
     批量设为空工具
 
@@ -314,7 +320,7 @@ def batch_setnull(rasters, out_dir, condition="VALUE>65528", prefix=None):
     ----------
     rasters:List[str]
         由待进行设为空操作的栅格文件组成的列表
-    out_dir:str
+    out_path:str
         批量设为空后的输出文件夹
     condition:List
         决定输入像元为真或假的逻辑表达式,默认为"VALUE>65528"
@@ -329,7 +335,7 @@ def batch_setnull(rasters, out_dir, condition="VALUE>65528", prefix=None):
     for raster in rasters:
         s = time.time()
         raster_name = os.path.split(raster)[1]
-        out_raster = os.path.join(out_dir, prefix + raster_name)
+        out_raster = os.path.join(out_path, prefix + raster_name)
         if not os.path.exists(out_raster):
             try:
                 arcpy.gp.SetNull_sa(raster, raster, out_raster, condition)
@@ -349,87 +355,75 @@ def mod13preprocess(workspace, hdfs, masks, out_coor_system, cell_size="#",
                     scale_prefix="", scale_factor=0.0001):
     tile_count = len(set([os.path.split(h)[1].split(".")[2] for h in hdfs]))
     if tile_count == 1:
-        dir_names = ["1_extract", "2_reproject", "3_clip", "4_scale"]
-        dirs = [os.path.join(workspace, name) for name in dir_names]
-        for dir in dirs:
-            if not os.path.exists(dir):
-                os.mkdir(dir)
+        paths = batch_mkdir(workspace, ["1_extract", "2_reproject", "3_clip", "4_scale"])
+        
         # step1
         s = time.time()
-        arcpy.AddMessage("Starting step 1/4: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
-        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        arcpy.AddMessage("Starting step 1/4: extract subdataset into {0}... {1}".format(paths[0], localtime()))
+        batch_extract_sds(hdfs, paths[0], sds_index=sds_index, suffix=sds_name)
         e = time.time()
         arcpy.AddMessage("Time for step1 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step2
         s = time.time()
-        arcpy.AddMessage("Starting step 2/4: reproject raster into {0}... {1}".format(dirs[1], localtime()))
-        rasters = find_tifs(dirs[0])
-        batch_project_raster(rasters, dirs[1], prefix=pr_prefix, out_coor_system=out_coor_system,
+        arcpy.AddMessage("Starting step 2/4: reproject raster into {0}... {1}".format(paths[1], localtime()))
+        batch_project_raster(find_tifs(paths[0]), paths[1], prefix=pr_prefix, out_coor_system=out_coor_system,
                              resampling_type=resampling_type, cell_size=cell_size)
         e = time.time()
         arcpy.AddMessage("Time for step2 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step3
         s = time.time()
-        arcpy.AddMessage("Starting step 3/4: clip raster into {0}... {1}".format(dirs[2], localtime()))
-        rasters = find_tifs(dirs[1])
-        batch_clip_raster(rasters, dirs[2], masks=masks)
+        arcpy.AddMessage("Starting step 3/4: clip raster into {0}... {1}".format(paths[2], localtime()))
+        batch_clip_raster(find_tifs(paths[1]), paths[2], masks=masks)
         e = time.time()
         arcpy.AddMessage("Time for step3 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step4
         s = time.time()
-        arcpy.AddMessage("Starting step 4/4:raster times scale factor into {0}... {1}".format(dirs[3], localtime()))
-        tifs = find_tifs(dirs[2])
-        batch_multiply(tifs, out_dir=dirs[3], prefix=scale_prefix, scale_factor=scale_factor)
+        arcpy.AddMessage("Starting step 4/4:raster times scale factor into {0}... {1}".format(paths[3], localtime()))
+        batch_multiply(find_tifs(paths[2]), out_path=paths[3], prefix=scale_prefix, scale_factor=scale_factor)
         e = time.time()
         arcpy.AddMessage("Time for step4 = %.2fs. %s\n" % (e - s, localtime()))
     else:
-        dir_names = ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_scale"]
-        dirs = [os.path.join(workspace, name) for name in dir_names]
-        for dir in dirs:
-            if not os.path.exists(dir):
-                os.mkdir(dir)
+        paths = batch_mkdir(workspace, ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_scale"])
+
         # step1
         s = time.time()
-        arcpy.AddMessage("Starting step 1/5: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
-        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        arcpy.AddMessage("Starting step 1/5: extract subdataset into {0}... {1}".format(paths[0], localtime()))
+        batch_extract_sds(hdfs, paths[0], sds_index=sds_index, suffix=sds_name)
         e = time.time()
-        arcpy.AddMessage("Time for step1 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step1 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step2
         s = time.time()
-        arcpy.AddMessage("Starting step 2/5: mosaic raster into {0}... {1}".format(dirs[1], localtime()))
-        batch_mosaic(dirs[0], dirs[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
+        arcpy.AddMessage("Starting step 2/5: mosaic raster into {0}... {1}".format(paths[1], localtime()))
+        batch_mosaic(paths[0], paths[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
                      colormap_mode=colormap_mode)
         e = time.time()
-        arcpy.AddMessage("Time for step2 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step2 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step3
         s = time.time()
-        arcpy.AddMessage("Starting step 3/5: reproject raster into {0}... {1}".format(dirs[2], localtime()))
-        rasters = find_tifs(dirs[1])
-        batch_project_raster(rasters, dirs[2], prefix=pr_prefix, out_coor_system=out_coor_system,
+        arcpy.AddMessage("Starting step 3/5: reproject raster into {0}... {1}".format(paths[2], localtime()))
+        batch_project_raster(find_tifs(paths[1]), paths[2], prefix=pr_prefix, out_coor_system=out_coor_system,
                              resampling_type=resampling_type, cell_size=cell_size)
         e = time.time()
-        arcpy.AddMessage("Time for step3 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step3 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step4
         s = time.time()
-        arcpy.AddMessage("Starting step 4/5: clip raster into {0}... {1}".format(dirs[3], localtime()))
-        rasters = find_tifs(dirs[2])
-        batch_clip_raster(rasters, dirs[3], masks=masks)
+        arcpy.AddMessage("Starting step 4/5: clip raster into {0}... {1}".format(paths[3], localtime()))
+        batch_clip_raster(find_tifs(paths[2]), paths[3], masks=masks)
         e = time.time()
-        arcpy.AddMessage("Time for step4 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step4 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step5
         s = time.time()
-        arcpy.AddMessage("Starting step 5/5:raster times scale factor into {0}... {1}".format(dirs[4], localtime()))
-        tifs = find_tifs(dirs[3])
-        batch_multiply(tifs, out_dir=dirs[4], prefix=scale_prefix, scale_factor=scale_factor)
+        arcpy.AddMessage("Starting step 5/5:raster times scale factor into {0}... {1}".format(paths[4], localtime()))
+        batch_multiply(find_tifs(paths[3]), out_path=paths[4], prefix=scale_prefix, scale_factor=scale_factor)
         e = time.time()
-        arcpy.AddMessage("Time for step5 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step5 = %.2fs. %s\n" % (e - s, localtime()))
 
 
 def mod16preprocess(workspace, hdfs, masks, out_coor_system, cell_size="#",
@@ -440,105 +434,88 @@ def mod16preprocess(workspace, hdfs, masks, out_coor_system, cell_size="#",
                     scale_prefix="", scale_factor=0.1):
     tile_count = len(set([os.path.split(h)[1].split(".")[2] for h in hdfs]))
     if tile_count == 1:
-        dir_names = ["1_extract", "2_reproject", "3_clip", "4_setn", "5_scale"]
-        dirs = [os.path.join(workspace, name) for name in dir_names]
-        for dir in dirs:
-            if not os.path.exists(dir):
-                os.mkdir(dir)
+        paths = batch_mkdir(workspace, ["1_extract", "2_reproject", "3_clip", "4_setn", "5_scale"])
         # step1
         s = time.time()
-        arcpy.AddMessage("Starting step 1/5: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
-        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        arcpy.AddMessage("Starting step 1/5: extract subdataset into {0}... {1}".format(paths[0], localtime()))
+        batch_extract_sds(hdfs, paths[0], sds_index=sds_index, suffix=sds_name)
         e = time.time()
         arcpy.AddMessage("Time for step1 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step2
         s = time.time()
-        arcpy.AddMessage("Starting step 2/5: reproject raster into {0}... {1}".format(dirs[1], localtime()))
-        rasters = find_tifs(dirs[0])
-        batch_project_raster(rasters, dirs[1], prefix=pr_prefix, out_coor_system=out_coor_system,
+        arcpy.AddMessage("Starting step 2/5: reproject raster into {0}... {1}".format(paths[1], localtime()))
+        batch_project_raster(find_tifs(paths[0]), paths[1], prefix=pr_prefix, out_coor_system=out_coor_system,
                              resampling_type=resampling_type, cell_size=cell_size)
         e = time.time()
         arcpy.AddMessage("Time for step2 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step3
         s = time.time()
-        arcpy.AddMessage("Starting step 3/5: clip raster into {0}... {1}".format(dirs[2], localtime()))
-        rasters = find_tifs(dirs[1])
-        batch_clip_raster(rasters, dirs[2], masks=masks)
+        arcpy.AddMessage("Starting step 3/5: clip raster into {0}... {1}".format(paths[2], localtime()))
+        batch_clip_raster(find_tifs(paths[1]), paths[2], masks=masks)
         e = time.time()
         arcpy.AddMessage("Time for step3 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step4
         s = time.time()
-        arcpy.AddMessage("Starting step 4/5: exclude invalid value, into {0}... {1}".format(dirs[3], localtime()))
-        rasters = find_tifs(dirs[2])
-        batch_setnull(rasters, dirs[3], condition=condition, prefix=sn_prefix)
+        arcpy.AddMessage("Starting step 4/5: exclude invalid value, into {0}... {1}".format(paths[3], localtime()))
+        batch_setnull(find_tifs(paths[2]), paths[3], condition=condition, prefix=sn_prefix)
         e = time.time()
         arcpy.AddMessage("Time for step4 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step5
         s = time.time()
-        arcpy.AddMessage("Starting step 5/5: raster times scale factor into {0}... {1}".format(dirs[4], localtime()))
-        tifs = find_tifs(dirs[3])
-        batch_multiply(tifs, out_dir=dirs[4], prefix=scale_prefix, scale_factor=scale_factor)
+        arcpy.AddMessage("Starting step 5/5: raster times scale factor into {0}... {1}".format(paths[4], localtime()))
+        batch_multiply(find_tifs(paths[3]), out_path=paths[4], prefix=scale_prefix, scale_factor=scale_factor)
         e = time.time()
         arcpy.AddMessage("Time for step5 = %.2fs. %s\n" % (e - s, localtime()))
 
     else:
-        dir_names = ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_setn", "6_scale"]
-        dirs = [os.path.join(workspace, name) for name in dir_names]
-        for dir in dirs:
-            if not os.path.exists(dir):
-                os.mkdir(dir)
+        paths = batch_mkdir(workspace, ["1_extract", "2_mosaic", "3_reproject", "4_clip", "5_setn", "6_scale"])
         # step1
         s = time.time()
-        arcpy.AddMessage("Starting step 1/6: extract subdataset into {0}... {1}".format(dirs[0], localtime()))
-        batch_extract_sds(hdfs, dirs[0], sds_index=sds_index, suffix=sds_name)
+        arcpy.AddMessage("Starting step 1/6: extract subdataset into {0}... {1}".format(paths[0], localtime()))
+        batch_extract_sds(hdfs, paths[0], sds_index=sds_index, suffix=sds_name)
         e = time.time()
-        arcpy.AddMessage("Time for step1 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step1 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step2
         s = time.time()
-        arcpy.AddMessage("Starting step 2/6: mosaic raster into {0}... {1}".format(dirs[1], localtime()))
-        batch_mosaic(dirs[0], dirs[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
+        arcpy.AddMessage("Starting step 2/6: mosaic raster into {0}... {1}".format(paths[1], localtime()))
+        batch_mosaic(paths[0], paths[1], pixel_type=pixel_type, mosaic_method=mosaic_method,
                      colormap_mode=colormap_mode)
         e = time.time()
-        arcpy.AddMessage("Time for step2 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step2 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step3
         s = time.time()
-        arcpy.AddMessage("Starting step 3/6: reproject raster into {0}... {1}".format(dirs[2], localtime()))
-        rasters = find_tifs(dirs[1])
-        batch_project_raster(rasters, dirs[2], prefix=pr_prefix, out_coor_system=out_coor_system,
+        arcpy.AddMessage("Starting step 3/6: reproject raster into {0}... {1}".format(paths[2], localtime()))
+        batch_project_raster(find_tifs(paths[1]), paths[2], prefix=pr_prefix, out_coor_system=out_coor_system,
                              resampling_type=resampling_type, cell_size=cell_size)
         e = time.time()
-        arcpy.AddMessage("Time for step3 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step3 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step4
         s = time.time()
-        arcpy.AddMessage("Starting step 4/6: clip raster into {0}... {1}".format(dirs[3], localtime()))
-        rasters = find_tifs(dirs[2])
-        batch_clip_raster(rasters, dirs[3], masks=masks)
+        arcpy.AddMessage("Starting step 4/6: clip raster into {0}... {1}".format(paths[3], localtime()))
+        batch_clip_raster(find_tifs(paths[2]), paths[3], masks=masks)
         e = time.time()
-        arcpy.AddMessage("Time for step4 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step4 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step5
         s = time.time()
-        arcpy.AddMessage("Starting step 5/6: exclude invalid value, into {0}... {1}".format(dirs[4], localtime()))
-        rasters = find_tifs(dirs[3])
-        batch_setnull(rasters, dirs[4], condition=condition, prefix=sn_prefix)
+        arcpy.AddMessage("Starting step 5/6: exclude invalid value, into {0}... {1}".format(paths[4], localtime()))
+        batch_setnull(find_tifs(paths[3]), paths[4], condition=condition, prefix=sn_prefix)
         e = time.time()
-        arcpy.AddMessage("Time for step5 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step5 = %.2fs. %s\n" % (e - s, localtime()))
 
         # step6
         s = time.time()
-        arcpy.AddMessage(
-            "Starting step 6/6: raster times scale factor into {0}... {1}".format(dirs[5], localtime()))
-        tifs = find_tifs(dirs[4])
-        batch_multiply(tifs, out_dir=dirs[5], prefix=scale_prefix, scale_factor=scale_factor)
+        arcpy.AddMessage("Starting step 6/6: raster times scale factor into {0}... {1}".format(paths[5], localtime()))
+        batch_multiply(find_tifs(paths[4]), out_path=paths[5], prefix=scale_prefix, scale_factor=scale_factor)
         e = time.time()
-        arcpy.AddMessage("Time for step5 = %.2fs. %s\n"%(e - s, localtime()))
+        arcpy.AddMessage("Time for step5 = %.2fs. %s\n" % (e - s, localtime()))
 
 
 class Toolbox(object):
@@ -557,10 +534,10 @@ class Tool1(object):
         """Define the tool (tool name is the name of the class)."""
         self.name = "MODIS数据综合处理"
         self.label = "MODIS数据综合处理工具"
-        self.description = """- 修复了对于单波段数hdf无法处理的bug，由于目标子数据索引参数是可选的
-                            - 添加：对MOD17A2-GPP数据的支持
-                            - 添加：对MOD17A3-NPP的支持
-                            - 添加：对MOD15A2-LAI的支持"""
+        self.description = """- 优化：单区块不执行镶嵌操作
+                            - 修复bug：参数 像元大小 修改为可选
+                            - 添加：对MOD15A2-LAI的支持
+                            - 添加：当裁剪用shp的坐标系为wgs 1984时，自动设定目标坐标系为对应范围的utm分带"""
         self.canRunInBackground = False
 
     def getParameterInfo(self):
@@ -588,10 +565,10 @@ class Tool1(object):
                                   direction="Input", multiValue=True)
         param_3.filter.list = ["shp"]
         param_4 = arcpy.Parameter(displayName="目标坐标系", name="out_corr",
-                                  datatype="GPCoordinateSystem", parameterType="Required",
+                                  datatype="GPSpatialReference", parameterType="Required",
                                   direction="Input")
         param_5 = arcpy.Parameter(displayName="像元大小", name="cell_size",
-                                  datatype="GPCellSizeXY", parameterType="Required",
+                                  datatype="GPCellSizeXY", parameterType="Optional",
                                   direction="Input")
         param_6 = arcpy.Parameter(displayName="子数据集索引", name="sds_idx",
                                   datatype="GPLong", parameterType="Optional",
@@ -665,6 +642,13 @@ class Tool1(object):
                 parameters[16].enabled = 0
             else:
                 parameters[16].enabled = 1
+        if parameters[3].altered and parameters[3].value is not None:
+            masks = parameters[3].valueAsText.split(";")
+            if arcpy.Describe(masks[0]).spatialReference.factoryCode == 4326:
+                xmin, xmax = arcpy.Describe(masks[0]).extent.XMin, arcpy.Describe(masks[0]).extent.XMax
+                tar_utm = int((xmin + xmax) / 2 / 6) + 31
+                if parameters[4].value is None:
+                    parameters[4].value = "WGS 1984 UTM Zone %dN"%tar_utm
         if parameters[0].value == "MOD13_NDVI":
             # parameters[5].value = "250 250"  # cell_size
             parameters[6].value = 0  # sds_index
@@ -803,7 +787,6 @@ class Tool1(object):
                                 sn_prefix=sn_prefix,
                                 condition=condition)
         except UnicodeEncodeError as cnerr:
-            arcpy.AddMessage("发生错误！部分参数包含中文字符导致该工具无法运行，可尝试修改为纯英文以解决%s"%"".encode('utf-8'))
+            arcpy.AddMessage("发生错误！部分参数包含中文字符导致该工具无法运行，可尝试修改为纯英文以解决%s" % "".encode('utf-8'))
             raise cnerr
         return
-
